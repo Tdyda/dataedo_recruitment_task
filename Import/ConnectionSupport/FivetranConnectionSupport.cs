@@ -92,7 +92,7 @@ public class FivetranConnectionSupport : IConnectionSupport
         return selectedGroup.Id;
     }
 
-    public void RunImport(object? connection)
+    public async Task RunImport(object? connection)
     {
         if (connection is not RestApiManagerWrapper restApiManagerWrapper)
         {
@@ -112,24 +112,33 @@ public class FivetranConnectionSupport : IConnectionSupport
 
         var allMappingsBuffer = new StringBuilder();
         allMappingsBuffer.AppendLine("Lineage mappings:");
-        Parallel.ForEach(connectors, connector =>
+        var tasks = connectors.Select(async connector =>
         {
-            var connectorSchemas = restApiManager
-                .GetConnectorSchemasAsync(connector.Id, CancellationToken.None)
-                .Result;
-
+            var connectorSchemas = await restApiManager.GetConnectorSchemasAsync(connector.Id, CancellationToken.None);
             
+            var sb = new StringBuilder();
+
             foreach (var schema in connectorSchemas?.Schemas ?? [])
             {
                 foreach (var table in schema.Value?.Tables ?? [])
                 {
-                    allMappingsBuffer.AppendLine(
-                        $"{connector.Id}: {schema.Key}.{table.Key} -> {schema.Value?.NameInDestination}.{table.Value.NameInDestination}"
+                    sb.AppendLine(
+                        $"  {connector.Id}: {schema.Key}.{table.Key} -> " +
+                        $"{schema.Value?.NameInDestination}.{table.Value.NameInDestination}"
                     );
                 }
             }
+            
+            return sb.ToString();
         });
 
-        Console.WriteLine(allMappingsBuffer);
+        var results = await Task.WhenAll(tasks);
+
+        foreach (var part in results)
+        {
+            allMappingsBuffer.Append(part);
+        }
+
+        Console.WriteLine(allMappingsBuffer.ToString());
     }
 }
