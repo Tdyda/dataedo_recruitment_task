@@ -5,30 +5,21 @@ namespace FivetranClient.Infrastructure;
 
 public class FivetranHttpClient : HttpClient
 {
-    public FivetranHttpClient(Uri baseAddress, string apiKey, string apiSecret, TimeSpan timeout)
+    public FivetranHttpClient(Uri baseAddress, string apiKey, string apiSecret, FivetranClientOptions options)
     {
-        if (timeout.Ticks <= 0)
-            throw new ArgumentOutOfRangeException(nameof(timeout), "Timeout must be a positive value");
+        if (options.Timeout.Ticks <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options.Timeout), "Timeout must be a positive value");
 
         this.DefaultRequestHeaders.Clear();
         this.BaseAddress = baseAddress;
         this.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Basic", this.CalculateToken(apiKey, apiSecret));
-        
+            new AuthenticationHeaderValue("Basic", CalculateToken(apiKey, apiSecret));
         this.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        // we need to set Agent Header because otherwise sometimes it may be blocked by the server
-        // see: https://repost.aws/knowledge-center/waf-block-http-requests-no-user-agent
-        
-        this.DefaultRequestHeaders.UserAgent.ParseAdd("Dataedo-FivetranClient/1.0");
-        this.Timeout = timeout;
+        this.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+        this.Timeout = options.Timeout;
     }
 
-    public FivetranHttpClient(Uri baseAddress, string apiKey, string apiSecret)
-        : this(baseAddress, apiKey, apiSecret, TimeSpan.FromSeconds(40))
-    {
-    }
-
-    public string CalculateToken(string apiKey, string apiSecret)
+    private static string CalculateToken(string apiKey, string apiSecret)
     {
         return Convert.ToBase64String(Encoding.ASCII.GetBytes($"{apiKey}:{apiSecret}"));
     }

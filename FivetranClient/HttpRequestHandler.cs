@@ -11,7 +11,7 @@ public class HttpRequestHandler
     private readonly object _lock = new();
     private DateTime _retryAfterTime = DateTime.UtcNow;
     private static readonly TtlDictionary<string, string> PayloadCache = new();
-    private static readonly TimeSpan PayloadCacheTtl = TimeSpan.FromSeconds(30);
+    private readonly FivetranClientOptions _options;
 
     /// <summary>
     /// Handles HttpTooManyRequests responses by limiting the number of concurrent requests and managing retry logic.
@@ -20,12 +20,14 @@ public class HttpRequestHandler
     /// <remarks>
     /// Set <paramref name="maxConcurrentRequests"/> to 0 to disable concurrency limit.
     /// </remarks>
-    public HttpRequestHandler(HttpClient client, ushort maxConcurrentRequests = 0)
+    public HttpRequestHandler(HttpClient client, FivetranClientOptions? options = null)
     {
         this._client = client;
-        if (maxConcurrentRequests > 0)
+        this._options = options ?? new FivetranClientOptions();
+
+        if (this._options.MaxConcurrentRequests > 0)
         {
-            this._semaphore = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
+            this._semaphore = new SemaphoreSlim(this._options.MaxConcurrentRequests, this._options.MaxConcurrentRequests);
         }
     }
 
@@ -101,7 +103,7 @@ public class HttpRequestHandler
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
             if (response.IsSuccessStatusCode)
             {
-                PayloadCache.GetOrAdd(url, () => payload, PayloadCacheTtl);
+                PayloadCache.GetOrAdd(url, () => payload, _options.CacheTtl ?? TimeSpan.FromSeconds(30));
             }
 
             response.Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
