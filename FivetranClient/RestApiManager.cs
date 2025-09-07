@@ -14,13 +14,13 @@ public class RestApiManager(HttpRequestHandler requestHandler) : IDisposable
 
     public static readonly Uri ApiBaseUrl = new("https://api.fivetran.com/v1/");
 
-    public RestApiManager(string apiKey, string apiSecret, TimeSpan timeout)
-        : this(ApiBaseUrl, apiKey, apiSecret, timeout)
+    public RestApiManager(string apiKey, string apiSecret, FivetranClientOptions? options = null)
+        : this(ApiBaseUrl, apiKey, apiSecret, options)
     {
     }
 
-    public RestApiManager(Uri baseUrl, string apiKey, string apiSecret, TimeSpan timeout)
-        : this(new FivetranHttpClient(baseUrl, apiKey, apiSecret, timeout), true)
+    public RestApiManager(Uri baseUrl, string apiKey, string apiSecret, FivetranClientOptions? options = null)
+        : this(new FivetranHttpClient(baseUrl, apiKey, apiSecret, options ?? new FivetranClientOptions()), true)
     {
     }
 

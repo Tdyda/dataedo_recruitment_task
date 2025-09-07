@@ -31,8 +31,12 @@ public class FivetranConnectionSupport : IConnectionSupport
             new RestApiManager(
                 details.ApiKey,
                 details.ApiSecret,
-                TimeSpan.FromSeconds(40)),
+                new FivetranClientOptions
+                {
+                    Timeout = TimeSpan.FromSeconds(40)
+                }),
             selectedToImport ?? throw new ArgumentNullException(nameof(selectedToImport)));
+
     }
 
     public void CloseConnection(object? connection)
@@ -56,7 +60,7 @@ public class FivetranConnectionSupport : IConnectionSupport
         {
             throw new ArgumentException("Invalid connection details provided.");
         }
-        using var restApiManager = new RestApiManager(details.ApiKey, details.ApiSecret, TimeSpan.FromSeconds(40));
+        using var restApiManager = new RestApiManager(details.ApiKey, details.ApiSecret);
         var groups = restApiManager
             .GetGroupsAsync(CancellationToken.None)
             .ToBlockingEnumerable();
