@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using FivetranClient.Infrastructure;
+using Microsoft.Extensions.Logging;
 
 namespace FivetranClient;
 
@@ -12,6 +13,7 @@ public class HttpRequestHandler
     private DateTime _retryAfterTime = DateTime.UtcNow;
     private static readonly TtlDictionary<string, string> PayloadCache = new();
     private readonly FivetranClientOptions _options;
+    private readonly ILogger<HttpRequestHandler>? _logger;
 
     /// <summary>
     /// Handles HttpTooManyRequests responses by limiting the number of concurrent requests and managing retry logic.
@@ -20,16 +22,20 @@ public class HttpRequestHandler
     /// <remarks>
     /// Set <paramref name="maxConcurrentRequests"/> to 0 to disable concurrency limit.
     /// </remarks>
-    public HttpRequestHandler(HttpClient client, FivetranClientOptions? options = null)
+    
+
+    public HttpRequestHandler(HttpClient client, FivetranClientOptions? options = null, ILogger<HttpRequestHandler>? logger = null)
     {
         this._client = client;
         this._options = options ?? new FivetranClientOptions();
+        this._logger = logger;
 
         if (this._options.MaxConcurrentRequests > 0)
         {
             this._semaphore = new SemaphoreSlim(this._options.MaxConcurrentRequests, this._options.MaxConcurrentRequests);
         }
     }
+
 
     public async Task<HttpResponseMessage> GetAsync(string url, CancellationToken cancellationToken)
     {
@@ -47,6 +53,8 @@ public class HttpRequestHandler
                 }
 
                 var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(60);
+                _logger?.LogWarning("Received 429 for {Url}, attempt {Attempt}/{Max}. Retrying after {RetryAfter}s.",
+                    url, attempt + 1, Max429Retries, retryAfter.TotalSeconds);
 
                 lock (this._lock)
                 {
@@ -93,6 +101,7 @@ public class HttpRequestHandler
 
             cancellationToken.ThrowIfCancellationRequested();
 
+            _logger?.LogDebug("Starting GET request to {Url}", url);
             var response = await this._client.GetAsync(new Uri(url, UriKind.Relative), cancellationToken);
             
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
