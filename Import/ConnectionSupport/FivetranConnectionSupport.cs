@@ -1,4 +1,5 @@
-﻿using FivetranClient;
+﻿using System.Text;
+using FivetranClient;
 using Import.Helpers.Fivetran;
 
 namespace Import.ConnectionSupport;
@@ -63,16 +64,16 @@ public class FivetranConnectionSupport : IConnectionSupport
         {
             throw new Exception("No groups found in Fivetran account.");
         }
-
-        // bufforing for performance
-        var consoleOutputBuffer = "";
-        consoleOutputBuffer += "Available groups in Fivetran account:\n";
+        
+        var consoleOutputBuffer = new StringBuilder();
+        consoleOutputBuffer.AppendLine("Available groups in Fivetran account:");
         var elementIndex = 1;
         foreach (var group in groups)
         {
-            consoleOutputBuffer += $"{elementIndex++}. {group.Name} (ID: {group.Id})\n";
+            consoleOutputBuffer.AppendLine($"{elementIndex++}. {group.Name} (ID: {group.Id})");
         }
-        consoleOutputBuffer += "Please select a group to import from (by number): ";
+        
+        consoleOutputBuffer.AppendLine("Please select a group to import from (by number): ");
         Console.Write(consoleOutputBuffer);
         var input = Console.ReadLine();
         if (string.IsNullOrWhiteSpace(input)
@@ -105,18 +106,22 @@ public class FivetranConnectionSupport : IConnectionSupport
             throw new Exception("No connectors found in the selected group.");
         }
 
-        var allMappingsBuffer = "Lineage mappings:\n";
+        var allMappingsBuffer = new StringBuilder();
+        allMappingsBuffer.AppendLine("Lineage mappings:");
         Parallel.ForEach(connectors, connector =>
         {
             var connectorSchemas = restApiManager
                 .GetConnectorSchemasAsync(connector.Id, CancellationToken.None)
                 .Result;
 
+            
             foreach (var schema in connectorSchemas?.Schemas ?? [])
             {
                 foreach (var table in schema.Value?.Tables ?? [])
                 {
-                    allMappingsBuffer += $"  {connector.Id}: {schema.Key}.{table.Key} -> {schema.Value?.NameInDestination}.{table.Value.NameInDestination}\n";
+                    allMappingsBuffer.AppendLine(
+                        $"{connector.Id}: {schema.Key}.{table.Key} -> {schema.Value?.NameInDestination}.{table.Value.NameInDestination}"
+                    );
                 }
             }
         });
