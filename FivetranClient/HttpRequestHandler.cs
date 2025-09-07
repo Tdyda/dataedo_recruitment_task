@@ -5,6 +5,7 @@ namespace FivetranClient;
 
 public class HttpRequestHandler
 {
+    private const int Max429Retries = 3;
     private readonly HttpClient _client;
     private readonly SemaphoreSlim? _semaphore;
     private readonly object _lock = new();
@@ -29,19 +30,40 @@ public class HttpRequestHandler
 
     public async Task<HttpResponseMessage> GetAsync(string url, CancellationToken cancellationToken)
     {
-        return _responseCache.GetOrAdd(
-            url,
-            () => this._GetAsync(url, cancellationToken).Result,
-            TimeSpan.FromMinutes(60));
+        for (var attempt = 0; ; attempt++)
+        {
+            var response = await this._GetOnceAsync(url, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                if (attempt >= Max429Retries)
+                {
+                    response.Dispose();
+                    throw new HttpRequestException(
+                        $"Too Many Requests (429) for '{url}'. Retry limit ({Max429Retries}) exceeded.");
+                }
+                
+                var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(60);
+                
+                response.Dispose();
+                
+                await Task.Delay(retryAfter, cancellationToken);
+                
+                continue;
+            }
+            
+            response.EnsureSuccessStatusCode();
+            return response;
+        }
     }
 
-    private async Task<HttpResponseMessage> _GetAsync(string url, CancellationToken cancellationToken)
+
+    private async Task<HttpResponseMessage> _GetOnceAsync(string url, CancellationToken cancellationToken)
     {
         if (this._semaphore is not null)
         {
             await this._semaphore.WaitAsync(cancellationToken);
         }
-
         try
         {
             TimeSpan timeToWait;
@@ -49,7 +71,6 @@ public class HttpRequestHandler
             {
                 timeToWait = this._retryAfterTime - DateTime.UtcNow;
             }
-
             if (timeToWait > TimeSpan.Zero)
             {
                 await Task.Delay(timeToWait, cancellationToken);
@@ -58,21 +79,15 @@ public class HttpRequestHandler
             cancellationToken.ThrowIfCancellationRequested();
 
             var response = await this._client.GetAsync(new Uri(url, UriKind.Relative), cancellationToken);
-            
-            if (response.StatusCode is HttpStatusCode.TooManyRequests)
+
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(60);
                 lock (this._lock)
                 {
                     this._retryAfterTime = DateTime.UtcNow.Add(retryAfter);
                 }
-                
-                response.Dispose();
-                
-                return await this._GetAsync(url, cancellationToken);
             }
-            
-            response.EnsureSuccessStatusCode();
             return response;
         }
         finally
@@ -80,4 +95,5 @@ public class HttpRequestHandler
             this._semaphore?.Release();
         }
     }
+
 }
