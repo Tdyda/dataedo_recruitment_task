@@ -10,5 +10,5 @@ public interface IConnectionSupport
     // Gets the connection object based on the provided details and selected database (or equivalent in ETL/BI)
     public object? GetConnection(object? connectionDetails, string? selectedToImport);
     public void CloseConnection(object? connection);
-    public void RunImport(object? connection);
+    public Task RunImport(object? connection);
 }
