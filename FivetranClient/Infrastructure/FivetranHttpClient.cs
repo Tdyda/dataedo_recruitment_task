@@ -14,10 +14,12 @@ public class FivetranHttpClient : HttpClient
         this.BaseAddress = baseAddress;
         this.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Basic", this.CalculateToken(apiKey, apiSecret));
+        
         this.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         // we need to set Agent Header because otherwise sometimes it may be blocked by the server
         // see: https://repost.aws/knowledge-center/waf-block-http-requests-no-user-agent
-        this.DefaultRequestHeaders.UserAgent.ParseAdd("aseduigbn");
+        
+        this.DefaultRequestHeaders.UserAgent.ParseAdd("Dataedo-FivetranClient/1.0");
         this.Timeout = timeout;
     }
 
