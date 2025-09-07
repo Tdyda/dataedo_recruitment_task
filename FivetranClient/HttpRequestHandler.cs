@@ -10,7 +10,8 @@ public class HttpRequestHandler
     private readonly SemaphoreSlim? _semaphore;
     private readonly object _lock = new();
     private DateTime _retryAfterTime = DateTime.UtcNow;
-    private static TtlDictionary<string, HttpResponseMessage> _responseCache = new();
+    private static readonly TtlDictionary<string, string> PayloadCache = new();
+    private static readonly TimeSpan PayloadCacheTtl = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Handles HttpTooManyRequests responses by limiting the number of concurrent requests and managing retry logic.
@@ -24,13 +25,13 @@ public class HttpRequestHandler
         this._client = client;
         if (maxConcurrentRequests > 0)
         {
-            this._semaphore = new SemaphoreSlim(0, maxConcurrentRequests);
+            this._semaphore = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
         }
     }
 
     public async Task<HttpResponseMessage> GetAsync(string url, CancellationToken cancellationToken)
     {
-        for (var attempt = 0; ; attempt++)
+        for (var attempt = 0;; attempt++)
         {
             var response = await this._GetOnceAsync(url, cancellationToken);
 
@@ -42,16 +43,21 @@ public class HttpRequestHandler
                     throw new HttpRequestException(
                         $"Too Many Requests (429) for '{url}'. Retry limit ({Max429Retries}) exceeded.");
                 }
-                
+
                 var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(60);
-                
+
+                lock (this._lock)
+                {
+                    this._retryAfterTime = DateTime.UtcNow.Add(retryAfter);
+                }
+
                 response.Dispose();
-                
+
                 await Task.Delay(retryAfter, cancellationToken);
-                
+
                 continue;
             }
-            
+
             response.EnsureSuccessStatusCode();
             return response;
         }
@@ -64,13 +70,20 @@ public class HttpRequestHandler
         {
             await this._semaphore.WaitAsync(cancellationToken);
         }
+
         try
         {
+            if (PayloadCache.TryGetValue(url, out var cachedPayload))
+            {
+                return CreateOkJsonResponse(cachedPayload);
+            }
+
             TimeSpan timeToWait;
             lock (this._lock)
             {
                 timeToWait = this._retryAfterTime - DateTime.UtcNow;
             }
+
             if (timeToWait > TimeSpan.Zero)
             {
                 await Task.Delay(timeToWait, cancellationToken);
@@ -79,15 +92,19 @@ public class HttpRequestHandler
             cancellationToken.ThrowIfCancellationRequested();
 
             var response = await this._client.GetAsync(new Uri(url, UriKind.Relative), cancellationToken);
-
+            
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(60);
-                lock (this._lock)
-                {
-                    this._retryAfterTime = DateTime.UtcNow.Add(retryAfter);
-                }
+                return response;
             }
+
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                PayloadCache.GetOrAdd(url, () => payload, PayloadCacheTtl);
+            }
+
+            response.Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
             return response;
         }
         finally
@@ -96,4 +113,12 @@ public class HttpRequestHandler
         }
     }
 
+    private static HttpResponseMessage CreateOkJsonResponse(string payload)
+    {
+        var msg = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json")
+        };
+        return msg;
+    }
 }
