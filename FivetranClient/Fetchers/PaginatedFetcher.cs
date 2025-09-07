@@ -20,12 +20,27 @@ public sealed class PaginatedFetcher(HttpRequestHandler requestHandler) : BaseFe
         CancellationToken cancellationToken,
         string? cursor = null)
     {
-        var response = cursor is null
-            ? await base.RequestHandler.GetAsync($"{endpoint}?limit={PageSize}", cancellationToken)
-            : await base.RequestHandler.GetAsync($"{endpoint}?limit={PageSize}&cursor={WebUtility.UrlEncode(cursor)}", cancellationToken);
+        var url = cursor is null
+            ? $"{endpoint}?limit={PageSize}"
+            : $"{endpoint}?limit={PageSize}&cursor={WebUtility.UrlEncode(cursor)}";
+
+        var response = await base.RequestHandler.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
+
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        return JsonSerializer.Deserialize<PaginatedRoot<T>>(content, SerializerOptions);
+        try
+        {
+            return JsonSerializer.Deserialize<PaginatedRoot<T>>(content, SerializerOptions);
+        }
+        catch (JsonException ex)
+        {
+            var preview = (content.Length > 200 ? string.Concat(content.AsSpan(0, 200), "...") : content);
+
+            throw new InvalidOperationException(
+                $"Failed to deserialize response. Endpoint='{url}', Target='PaginatedRoot<{typeof(T).Name}>', PayloadPreview=\"{preview}\"",
+                ex);
+        }
+
     }
 
     // This implementation provides items as soon as they are available but also in the meantime fetches the next page
