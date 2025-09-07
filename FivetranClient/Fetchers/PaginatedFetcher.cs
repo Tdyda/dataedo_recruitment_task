@@ -23,6 +23,7 @@ public sealed class PaginatedFetcher(HttpRequestHandler requestHandler) : BaseFe
         var response = cursor is null
             ? await base.RequestHandler.GetAsync($"{endpoint}?limit={PageSize}", cancellationToken)
             : await base.RequestHandler.GetAsync($"{endpoint}?limit={PageSize}&cursor={WebUtility.UrlEncode(cursor)}", cancellationToken);
+        response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize<PaginatedRoot<T>>(content, SerializerOptions);
     }
