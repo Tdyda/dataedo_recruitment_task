@@ -3,9 +3,9 @@
 namespace Import;
 
 // !Ta klasa nie podlega code review!
-class Program
+internal class Program
 {
-    static void Main(string[] args)
+    private static void Main(string[] args)
     {
         while (true)
         {
@@ -25,12 +25,10 @@ class Program
             {
                 connectionSupport.CloseConnection(connection);
             }
+
             Console.WriteLine("Press any key to continue, or 'q' to exit...");
             var key = Console.ReadKey(true);
-            if (key.KeyChar is 'q' or 'Q')
-            {
-                Environment.Exit(0);
-            }
+            if (key.KeyChar is 'q' or 'Q') Environment.Exit(0);
         }
     }
 
@@ -41,10 +39,7 @@ class Program
         while (true)
         {
             Console.Clear();
-            if (!string.IsNullOrEmpty(errorMessage))
-            {
-                Console.WriteLine($"Error: {errorMessage}");
-            }
+            if (!string.IsNullOrEmpty(errorMessage)) Console.WriteLine($"Error: {errorMessage}");
 
             try
             {

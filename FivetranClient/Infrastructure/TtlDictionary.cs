@@ -8,10 +8,7 @@ public class TtlDictionary<TKey, TValue> where TKey : notnull
     {
         if (_dictionary.TryGetValue(key, out var entry))
         {
-            if (DateTime.UtcNow < entry.Item2)
-            {
-                return entry.Item1;
-            }
+            if (DateTime.UtcNow < entry.Item2) return entry.Item1;
 
             _dictionary.Remove(key);
         }

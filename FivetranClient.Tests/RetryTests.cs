@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 
 namespace FivetranClient.Tests;
 
@@ -19,7 +20,7 @@ public class RetryTests
                     )
                 };
             var resp = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
-            resp.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMilliseconds(10));
+            resp.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromMilliseconds(10));
             return resp;
         });
 

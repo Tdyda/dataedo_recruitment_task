@@ -9,7 +9,7 @@ public class RestApiManagerWrapper(RestApiManager restApiManager, string groupId
 
     public void Dispose()
     {
-        this.RestApiManager.Dispose();
+        RestApiManager.Dispose();
         GC.SuppressFinalize(this);
     }
 }

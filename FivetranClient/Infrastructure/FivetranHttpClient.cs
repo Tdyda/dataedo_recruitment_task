@@ -10,13 +10,13 @@ public class FivetranHttpClient : HttpClient
         if (options.Timeout.Ticks <= 0)
             throw new ArgumentOutOfRangeException(nameof(options.Timeout), "Timeout must be a positive value");
 
-        this.DefaultRequestHeaders.Clear();
-        this.BaseAddress = baseAddress;
-        this.DefaultRequestHeaders.Authorization =
+        DefaultRequestHeaders.Clear();
+        BaseAddress = baseAddress;
+        DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Basic", CalculateToken(apiKey, apiSecret));
-        this.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        this.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
-        this.Timeout = options.Timeout;
+        DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+        Timeout = options.Timeout;
     }
 
     private static string CalculateToken(string apiKey, string apiSecret)

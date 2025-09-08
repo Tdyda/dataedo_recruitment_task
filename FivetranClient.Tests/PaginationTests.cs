@@ -1,13 +1,7 @@
+using System.Net;
 using FivetranClient.Fetchers;
 
 namespace FivetranClient.Tests;
-
-using System.Net;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using Xunit;
-using Models;
 
 public class PaginationTests
 {
@@ -19,14 +13,12 @@ public class PaginationTests
         var handler = new StubHttpMessageHandler(req =>
         {
             if (!req.RequestUri!.ToString().Contains("cursor"))
-            {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(
                         "{ \"data\": { \"items\": [\"a\",\"b\"], \"next_cursor\": \"cursor1\" } }"
                     )
                 };
-            }
 
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -42,13 +34,11 @@ public class PaginationTests
         };
         var requestHandler = new HttpRequestHandler(httpClient);
         var fetcher = new PaginatedFetcher(requestHandler);
-        
+
         var results = new List<string>();
         await foreach (var item in fetcher.FetchItemsAsync<string>("testendpoint", CancellationToken.None))
-        {
             results.Add(item);
-        }
-        
+
         Assert.Equal(Expected, results);
     }
 }

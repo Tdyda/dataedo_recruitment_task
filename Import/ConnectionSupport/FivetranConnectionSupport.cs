@@ -8,7 +8,6 @@ namespace Import.ConnectionSupport;
 public class FivetranConnectionSupport : IConnectionSupport
 {
     public const string ConnectorTypeCode = "FIVETRAN";
-    private record FivetranConnectionDetailsForSelection(string ApiKey, string ApiSecret);
 
     public object? GetConnectionDetailsForSelection()
     {
@@ -23,9 +22,7 @@ public class FivetranConnectionSupport : IConnectionSupport
     public object GetConnection(object? connectionDetails, string? selectedToImport)
     {
         if (connectionDetails is not FivetranConnectionDetailsForSelection details)
-        {
             throw new ArgumentException("Invalid connection details provided.");
-        }
 
         return new RestApiManagerWrapper(
             new RestApiManager(
@@ -36,7 +33,6 @@ public class FivetranConnectionSupport : IConnectionSupport
                     Timeout = TimeSpan.FromSeconds(40)
                 }),
             selectedToImport ?? throw new ArgumentNullException(nameof(selectedToImport)));
-
     }
 
     public void CloseConnection(object? connection)
@@ -57,26 +53,19 @@ public class FivetranConnectionSupport : IConnectionSupport
     public string SelectToImport(object? connectionDetails)
     {
         if (connectionDetails is not FivetranConnectionDetailsForSelection details)
-        {
             throw new ArgumentException("Invalid connection details provided.");
-        }
         using var restApiManager = new RestApiManager(details.ApiKey, details.ApiSecret);
         var groups = restApiManager
             .GetGroupsAsync(CancellationToken.None)
             .ToBlockingEnumerable();
-        if (!groups.Any())
-        {
-            throw new Exception("No groups found in Fivetran account.");
-        }
-        
+        if (!groups.Any()) throw new Exception("No groups found in Fivetran account.");
+
         var consoleOutputBuffer = new StringBuilder();
         consoleOutputBuffer.AppendLine("Available groups in Fivetran account:");
         var elementIndex = 1;
         foreach (var group in groups)
-        {
             consoleOutputBuffer.AppendLine($"{elementIndex++}. {group.Name} (ID: {group.Id})");
-        }
-        
+
         consoleOutputBuffer.AppendLine("Please select a group to import from (by number): ");
         Console.Write(consoleOutputBuffer);
         var input = Console.ReadLine();
@@ -84,9 +73,7 @@ public class FivetranConnectionSupport : IConnectionSupport
             || !int.TryParse(input, out var selectedIndex)
             || selectedIndex < 1
             || selectedIndex > groups.Count())
-        {
             throw new ArgumentException("Invalid group selection.");
-        }
 
         var selectedGroup = groups.ElementAt(selectedIndex - 1);
         return selectedGroup.Id;
@@ -95,9 +82,7 @@ public class FivetranConnectionSupport : IConnectionSupport
     public async Task RunImport(object? connection)
     {
         if (connection is not RestApiManagerWrapper restApiManagerWrapper)
-        {
             throw new ArgumentException("Invalid connection type provided.");
-        }
 
         var restApiManager = restApiManagerWrapper.RestApiManager;
         var groupId = restApiManagerWrapper.GroupId;
@@ -105,40 +90,32 @@ public class FivetranConnectionSupport : IConnectionSupport
         var connectors = restApiManager
             .GetConnectorsAsync(groupId, CancellationToken.None)
             .ToBlockingEnumerable();
-        if (!connectors.Any())
-        {
-            throw new Exception("No connectors found in the selected group.");
-        }
+        if (!connectors.Any()) throw new Exception("No connectors found in the selected group.");
 
         var allMappingsBuffer = new StringBuilder();
         allMappingsBuffer.AppendLine("Lineage mappings:");
         var tasks = connectors.Select(async connector =>
         {
             var connectorSchemas = await restApiManager.GetConnectorSchemasAsync(connector.Id, CancellationToken.None);
-            
+
             var sb = new StringBuilder();
 
             foreach (var schema in connectorSchemas?.Schemas ?? [])
-            {
-                foreach (var table in schema.Value?.Tables ?? [])
-                {
-                    sb.AppendLine(
-                        $"  {connector.Id}: {schema.Key}.{table.Key} -> " +
-                        $"{schema.Value?.NameInDestination}.{table.Value.NameInDestination}"
-                    );
-                }
-            }
-            
+            foreach (var table in schema.Value?.Tables ?? [])
+                sb.AppendLine(
+                    $"  {connector.Id}: {schema.Key}.{table.Key} -> " +
+                    $"{schema.Value?.NameInDestination}.{table.Value.NameInDestination}"
+                );
+
             return sb.ToString();
         });
 
         var results = await Task.WhenAll(tasks);
 
-        foreach (var part in results)
-        {
-            allMappingsBuffer.Append(part);
-        }
+        foreach (var part in results) allMappingsBuffer.Append(part);
 
         Console.WriteLine(allMappingsBuffer.ToString());
     }
+
+    private record FivetranConnectionDetailsForSelection(string ApiKey, string ApiSecret);
 }

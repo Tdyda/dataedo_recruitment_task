@@ -11,8 +11,8 @@ public sealed class PaginatedFetcher(HttpRequestHandler requestHandler) : BaseFe
 
     public IAsyncEnumerable<T> FetchItemsAsync<T>(string endpoint, CancellationToken cancellationToken)
     {
-        var firstPageTask = this.FetchPageAsync<T>(endpoint, cancellationToken);
-        return this.ProcessPagesRecursivelyAsync(endpoint, firstPageTask, cancellationToken);
+        var firstPageTask = FetchPageAsync<T>(endpoint, cancellationToken);
+        return ProcessPagesRecursivelyAsync(endpoint, firstPageTask, cancellationToken);
     }
 
     private async Task<PaginatedRoot<T>?> FetchPageAsync<T>(
@@ -24,7 +24,7 @@ public sealed class PaginatedFetcher(HttpRequestHandler requestHandler) : BaseFe
             ? $"{endpoint}?limit={PageSize}"
             : $"{endpoint}?limit={PageSize}&cursor={WebUtility.UrlEncode(cursor)}";
 
-        var response = await base.RequestHandler.GetAsync(url, cancellationToken);
+        var response = await RequestHandler.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -34,13 +34,12 @@ public sealed class PaginatedFetcher(HttpRequestHandler requestHandler) : BaseFe
         }
         catch (JsonException ex)
         {
-            var preview = (content.Length > 200 ? string.Concat(content.AsSpan(0, 200), "...") : content);
+            var preview = content.Length > 200 ? string.Concat(content.AsSpan(0, 200), "...") : content;
 
             throw new InvalidOperationException(
                 $"Failed to deserialize response. Endpoint='{url}', Target='PaginatedRoot<{typeof(T).Name}>', PayloadPreview=\"{preview}\"",
                 ex);
         }
-
     }
 
     // This implementation provides items as soon as they are available but also in the meantime fetches the next page
@@ -57,8 +56,8 @@ public sealed class PaginatedFetcher(HttpRequestHandler requestHandler) : BaseFe
         if (!string.IsNullOrWhiteSpace(nextCursor))
         {
             // fire and forget (await after yielding current items)
-            var nextTask = this.FetchPageAsync<T>(endpoint, cancellationToken, nextCursor);
-            nextResults = this.ProcessPagesRecursivelyAsync(endpoint, nextTask, cancellationToken);
+            var nextTask = FetchPageAsync<T>(endpoint, cancellationToken, nextCursor);
+            nextResults = ProcessPagesRecursivelyAsync(endpoint, nextTask, cancellationToken);
         }
 
         foreach (var item in currentPage?.Data?.Items ?? [])
@@ -69,10 +68,7 @@ public sealed class PaginatedFetcher(HttpRequestHandler requestHandler) : BaseFe
 
         if (nextResults is null)
             yield break;
-        await foreach (var nextItem in nextResults.WithCancellation(cancellationToken))
-        {
-            yield return nextItem;
-        }
+        await foreach (var nextItem in nextResults.WithCancellation(cancellationToken)) yield return nextItem;
 
         cancellationToken.ThrowIfCancellationRequested();
     }

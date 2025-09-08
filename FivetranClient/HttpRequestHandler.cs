@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Text;
 using FivetranClient.Infrastructure;
 using Microsoft.Extensions.Logging;
 
@@ -7,33 +8,30 @@ namespace FivetranClient;
 public class HttpRequestHandler
 {
     private const int Max429Retries = 3;
-    private readonly HttpClient _client;
-    private readonly SemaphoreSlim? _semaphore;
-    private readonly object _lock = new();
-    private DateTime _retryAfterTime = DateTime.UtcNow;
     private static readonly TtlDictionary<string, string> PayloadCache = new();
-    private readonly FivetranClientOptions _options;
+    private readonly HttpClient _client;
+    private readonly object _lock = new();
     private readonly ILogger<HttpRequestHandler>? _logger;
+    private readonly FivetranClientOptions _options;
+    private readonly SemaphoreSlim? _semaphore;
+    private DateTime _retryAfterTime = DateTime.UtcNow;
 
     /// <summary>
-    /// Handles HttpTooManyRequests responses by limiting the number of concurrent requests and managing retry logic.
-    /// Also caches responses to avoid unnecessary network calls.
+    ///     Handles HttpTooManyRequests responses by limiting the number of concurrent requests and managing retry logic.
+    ///     Also caches responses to avoid unnecessary network calls.
     /// </summary>
     /// <remarks>
-    /// Set <paramref name="maxConcurrentRequests"/> to 0 to disable concurrency limit.
+    ///     Set <paramref name="maxConcurrentRequests" /> to 0 to disable concurrency limit.
     /// </remarks>
-    
-
-    public HttpRequestHandler(HttpClient client, FivetranClientOptions? options = null, ILogger<HttpRequestHandler>? logger = null)
+    public HttpRequestHandler(HttpClient client, FivetranClientOptions? options = null,
+        ILogger<HttpRequestHandler>? logger = null)
     {
-        this._client = client;
-        this._options = options ?? new FivetranClientOptions();
-        this._logger = logger;
+        _client = client;
+        _options = options ?? new FivetranClientOptions();
+        _logger = logger;
 
-        if (this._options.MaxConcurrentRequests > 0)
-        {
-            this._semaphore = new SemaphoreSlim(this._options.MaxConcurrentRequests, this._options.MaxConcurrentRequests);
-        }
+        if (_options.MaxConcurrentRequests > 0)
+            _semaphore = new SemaphoreSlim(_options.MaxConcurrentRequests, _options.MaxConcurrentRequests);
     }
 
 
@@ -41,7 +39,7 @@ public class HttpRequestHandler
     {
         for (var attempt = 0;; attempt++)
         {
-            var response = await this._GetOnceAsync(url, cancellationToken);
+            var response = await _GetOnceAsync(url, cancellationToken);
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
@@ -56,9 +54,9 @@ public class HttpRequestHandler
                 _logger?.LogWarning("Received 429 for {Url}, attempt {Attempt}/{Max}. Retrying after {RetryAfter}s.",
                     url, attempt + 1, Max429Retries, retryAfter.TotalSeconds);
 
-                lock (this._lock)
+                lock (_lock)
                 {
-                    this._retryAfterTime = DateTime.UtcNow.Add(retryAfter);
+                    _retryAfterTime = DateTime.UtcNow.Add(retryAfter);
                 }
 
                 response.Dispose();
@@ -76,51 +74,37 @@ public class HttpRequestHandler
 
     private async Task<HttpResponseMessage> _GetOnceAsync(string url, CancellationToken cancellationToken)
     {
-        if (this._semaphore is not null)
-        {
-            await this._semaphore.WaitAsync(cancellationToken);
-        }
+        if (_semaphore is not null) await _semaphore.WaitAsync(cancellationToken);
 
         try
         {
-            if (PayloadCache.TryGetValue(url, out var cachedPayload))
-            {
-                return CreateOkJsonResponse(cachedPayload);
-            }
+            if (PayloadCache.TryGetValue(url, out var cachedPayload)) return CreateOkJsonResponse(cachedPayload);
 
             TimeSpan timeToWait;
-            lock (this._lock)
+            lock (_lock)
             {
-                timeToWait = this._retryAfterTime - DateTime.UtcNow;
+                timeToWait = _retryAfterTime - DateTime.UtcNow;
             }
 
-            if (timeToWait > TimeSpan.Zero)
-            {
-                await Task.Delay(timeToWait, cancellationToken);
-            }
+            if (timeToWait > TimeSpan.Zero) await Task.Delay(timeToWait, cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
 
             _logger?.LogDebug("Starting GET request to {Url}", url);
-            var response = await this._client.GetAsync(new Uri(url, UriKind.Relative), cancellationToken);
-            
-            if (response.StatusCode == HttpStatusCode.TooManyRequests)
-            {
-                return response;
-            }
+            var response = await _client.GetAsync(new Uri(url, UriKind.Relative), cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.TooManyRequests) return response;
 
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
             if (response.IsSuccessStatusCode)
-            {
                 PayloadCache.GetOrAdd(url, () => payload, _options.CacheTtl ?? TimeSpan.FromSeconds(30));
-            }
 
-            response.Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
+            response.Content = new StringContent(payload, Encoding.UTF8, "application/json");
             return response;
         }
         finally
         {
-            this._semaphore?.Release();
+            _semaphore?.Release();
         }
     }
 
@@ -128,7 +112,7 @@ public class HttpRequestHandler
     {
         var msg = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json")
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
         };
         return msg;
     }
